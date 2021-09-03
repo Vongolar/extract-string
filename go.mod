@@ -1,3 +1,3 @@
-module extract-string
+module extractString
 
 go 1.16
