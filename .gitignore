@@ -1,6 +1,7 @@
 /.vscode
 
 *_test.go
+*.log
 
 # Binaries for programs and plugins
 *.exe
