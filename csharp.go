@@ -3,10 +3,11 @@ package extract
 import "io"
 
 type ExtractorCSharp struct {
-	annotation      bool
-	mutliAnnotation bool
+	annotation      bool //是否在注释内
+	mutliAnnotation bool //是否在多行注释内
 	isStr           bool
 	isAbsoteStr     bool
+	isFormat        bool
 
 	lastByte byte
 	findStr  []byte
@@ -33,20 +34,21 @@ func (extractor *ExtractorCSharp) Extract(reader io.ReadSeeker, onFindStr OnFind
 	for err == nil {
 
 		if extractor.annotation {
-
+			// 在注释内
 			if extractor.mutliAnnotation {
 				if cache[0] == '/' && extractor.lastByte == '*' {
-					extractor.annotation = false
-					extractor.mutliAnnotation = false
+					// 多行注释结束
+					extractor.endAnnotation()
 				}
 			} else {
 				if cache[0] == '\n' {
-					extractor.annotation = false
+					// 单行注释结束
+					extractor.endAnnotation()
 				}
 			}
 
 		} else if extractor.isStr {
-
+			// 在字符串内
 			if cache[0] != '"' {
 				// 仍然在字符串内
 			} else if extractor.isAbsoteStr {
@@ -71,6 +73,21 @@ func (extractor *ExtractorCSharp) Extract(reader io.ReadSeeker, onFindStr OnFind
 					extractor.isStr = false
 					extractor.isAbsoteStr = false
 				}
+			} else if extractor.isFormat {
+				// 是format$ 语法糖，并且不在{}内，只检查{}成对出现，不检查语法
+				n := 0
+				for _, b := range extractor.findStr {
+					if b == '{' {
+						n += 1
+					} else if b == '}' {
+						n -= 1
+					}
+				}
+				if n == 0 {
+					extractor.isStr = false
+					extractor.isFormat = false
+				}
+
 			} else {
 				if extractor.lastByte == '\\' && !isEvenEnd(extractor.findStr, '\\') {
 					// 仍然在字符串内
@@ -105,6 +122,12 @@ func (extractor *ExtractorCSharp) Extract(reader io.ReadSeeker, onFindStr OnFind
 				extractor.isAbsoteStr = true
 				extractor.startIndex = extractor.curIndex
 				extractor.findStr = make([]byte, 0)
+			} else if cache[0] == '"' && extractor.lastByte == '$' {
+				// format 语法糖 字符串开始
+				extractor.isStr = true
+				extractor.isFormat = true
+				extractor.startIndex = extractor.curIndex
+				extractor.findStr = make([]byte, 0)
 			} else if cache[0] == '"' {
 				//单行字符串开始
 				extractor.isStr = true
@@ -124,6 +147,10 @@ func (extractor *ExtractorCSharp) Extract(reader io.ReadSeeker, onFindStr OnFind
 	}
 
 	return err
+}
+
+func (extractor *ExtractorCSharp) endAnnotation() {
+	extractor.annotation, extractor.mutliAnnotation = false, false
 }
 
 // bs 结尾相邻 b 是偶数个
